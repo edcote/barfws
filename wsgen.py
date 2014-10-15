@@ -1,8 +1,26 @@
 #!/usr/bin/env python
+"""
+WSGen - WorkSpace Generator
+Copyright (c) 2014 Edmond Cote <edmond.cote@gmail.com>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
 
 import os
 import shutil
 import logging
+
 
 class WSGen(object):
     def __init__(self,args):
@@ -17,6 +35,9 @@ class WSGen(object):
     def gen_comp_yml(self,path,name,files='',requires='',options=''):
         """ Make template BARF script """
         f = open(path+'/comp.yml','w')
+
+        if options == '':
+            options = '+incdir+'+path
 
         barf = '''\
 name: comp_{name}
@@ -46,31 +67,42 @@ endmodule
         f = open('{}/{}_tb.sv'.format(path,name),'w')
         tb_top = """\
 module {name}_tb;
-// ----------------------------------------------------------------------------
-// Clock generator
-// ----------------------------------------------------------------------------
-bit clk = 0;
-initial
+  `include "uvm_macros.svh"
+  import uvm_pkg::*;
+  import {name}_env_pkg::*;
+
+  // ---------------------------------------------------------------------------
+  // Reference clock
+  // ---------------------------------------------------------------------------
+  bit clk = 0;
+  initial
     forever #5 clk = !clk;
 
-// ----------------------------------------------------------------------------
-// Reset generator
-// ----------------------------------------------------------------------------
-bit rst = 0;
-wire rst_n = !rst;
+  // ---------------------------------------------------------------------------
+  // Reset generator
+  // ---------------------------------------------------------------------------
+  bit rst = 0;
+  wire rst_n = !rst;
 
-initial begin
+  initial begin
     @(negedge clk);
     rst = 1;
     @(negedge clk);
     rst = 0;
-end
+  end
 
-// ----------------------------------------------------------------------------
-// DUT
-// ----------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // DUT
+  // ---------------------------------------------------------------------------
 
-{name} u_{name} (.*);
+  {name} u_{name} (.*);
+
+  // ---------------------------------------------------------------------------
+  // UVM
+  // ---------------------------------------------------------------------------
+
+  initial
+    run_test();
 
 endmodule : {name}_tb
 """.format(name=name)
@@ -81,10 +113,38 @@ endmodule : {name}_tb
         """ Generates environment package template """
         f = open('{}/{}_env_pkg.sv'.format(path,name),'w')
         tb_top = """\
-package {name}_tb_pkg;
-endpackage : {name}_tb_pkg
+package {name}_env_pkg;
+  `include "uvm_macros.svh"
+  import uvm_pkg::*;
+
+  `include "{name}_test.sv"
+endpackage : {name}_env_pkg
 """.format(name=name)
         f.write(tb_top)
+        f.close()
+
+        f = open('{}/{}_test.sv'.format(path,name),'w')
+        test_base = """\
+class {name}_test extends uvm_test;
+  `uvm_component_utils({name}_test)
+
+  extern function new(string name, uvm_component parent);
+
+  extern virtual task run_phase(uvm_phase phase);
+endclass : {name}_test
+
+function {name}_test::new(string name, uvm_component parent);
+  super.new(name, parent);
+endfunction : new
+
+task {name}_test::run_phase(uvm_phase phase);
+  super.run_phase(phase);
+  phase.raise_objection(this);
+  #(10*100000); //--FIXME
+  phase.drop_objection(this);
+endtask : run_phase
+""".format(name=name)
+        f.write(test_base)
         f.close()
 
     def make_core(self,ws_path,name):
@@ -136,8 +196,8 @@ endpackage : {name}_tb_pkg
         # Generate template for UVM library component
         path = ws_path+'/libs/uvm'
         self.gen_path(path)
-        self.gen_comp_yml(path,'uvm','"${UVM_HOME}/uvm_pkg.sv"',
-                          options='"+incdir+${UVM_HOME}"')
+        self.gen_comp_yml(path,'uvm','"${UVM_HOME}/src/uvm_pkg.sv"',
+                          options='"+incdir+${UVM_HOME}/src +define+UVM_NO_DPI"')
 
 if __name__ == "__main__":
     import argparse
