@@ -30,7 +30,10 @@ class WSGen(object):
     def gen_path(self,path):
         """ Creates specified directory in file system """
         logging.info('Creating directory '+path)
-        os.makedirs(path)
+        try:
+            os.makedirs(path)
+        except:
+            pass
 
     def gen_comp_yml(self,path,name,files='',requires='',options=''):
         """ Make template BARF script """
@@ -48,9 +51,9 @@ requires: [{requires}]
         f.write(barf)
         f.close()
 
-    def gen_top_v(self,path,name):
+    def gen_top_sv(self,path,name):
         """ Make template top """
-        f = open('{}/{}.v'.format(path,name),'w')
+        f = open('{}/{}.sv'.format(path,name),'w')
         top = """\
 module {name} (
     input clk,
@@ -153,8 +156,8 @@ endtask : run_phase
         # make directory for RTL design
         path = base_path+'rtl/'
         self.gen_path(path)
-        self.gen_top_v(path,name)
-        self.gen_comp_yml(path,name,name+'.v') 
+        self.gen_top_sv(path,name)
+        self.gen_comp_yml(path,name,name+'.sv',requires='comp_common')
 
         # make directory for environment component
         path = base_path+'sim/env/'
@@ -183,7 +186,10 @@ endtask : run_phase
             shutil.rmtree(ws_path)
 
         # Create tmp directory
-        os.makedirs(ws_path+'/tmp')
+        try:
+            os.makedirs(ws_path+'/tmp')
+        except:
+            pass
 
         # Make base directories
         self.gen_path(ws_path+'/cores')
@@ -199,6 +205,12 @@ endtask : run_phase
         self.gen_path(path)
         self.gen_comp_yml(path,'uvm','"${UVM_HOME}/src/uvm_pkg.sv"',
                           options='"+incdir+${UVM_HOME}/src +define+UVM_NO_DPI"')
+
+        # Generate tempalte for common RTL
+        path = ws_path+'/libs/common'
+        self.gen_path(path)
+        self.gen_comp_yml(path,name='common',files="common.sv")
+
 
 if __name__ == "__main__":
     import argparse
