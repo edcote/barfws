@@ -188,6 +188,7 @@ endtask : run_phase
         # Make base directories
         self.gen_path(ws_path+'/cores')
         self.gen_path(ws_path+'/libs')
+        self.gen_path(ws_path+'/doc')
 
         # Generate template for each core
         for c in args.cores:
